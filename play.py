@@ -5,6 +5,7 @@ import requests
 from pprint import pprint
 import time
 import os
+import sys
 
 
 def main():
@@ -12,9 +13,9 @@ def main():
     parser.add_argument("query")
     args = parser.parse_args()
 
-    if not any([x['is_active'] for x in devices()['devices']]):
+    if not any([x["is_active"] for x in devices()["devices"]]):
         print("No active device")
-        return
+        sys.exit(1)
 
     if args.query.startswith("spotify:"):
         track = args.query
@@ -77,9 +78,10 @@ def play_wait(track):
         j = now_playing()
         playing = j["is_playing"]
         uri = j["item"]["uri"]
-        if playing:
+        remaining = j["item"]["duration_ms"] - j["progress_ms"]
+        if playing and remaining > 0:
             print("Playing", uri)
-            print("ms left", j["item"]["duration_ms"] - j["progress_ms"])
+            print("ms left", remaining)
         else:
             break
     print("Done")
