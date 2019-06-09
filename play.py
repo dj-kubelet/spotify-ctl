@@ -12,6 +12,10 @@ def main():
     parser.add_argument("query")
     args = parser.parse_args()
 
+    if not any([x['is_active'] for x in devices()['devices']]):
+        print("No active device")
+        return
+
     if args.query.startswith("spotify:"):
         track = args.query
         # Remove URI parameters if possible
@@ -48,6 +52,13 @@ def search(query):
 
 def now_playing():
     url = "https://api.spotify.com/v1/me/player"
+    r = requests.get(url, headers=get_auth_header())
+    j = r.json()
+    return j
+
+
+def devices():
+    url = "https://api.spotify.com/v1/me/player/devices"
     r = requests.get(url, headers=get_auth_header())
     j = r.json()
     return j
