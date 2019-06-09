@@ -7,7 +7,7 @@ metadata:
 spec:
   restartPolicy: Never
   containers:
-  - image: spotify-ctl:latest
+  - image: djkubelet/spotify-ctl:latest
     name: track
     imagePullPolicy: IfNotPresent
     args:
