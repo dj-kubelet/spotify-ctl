@@ -9,21 +9,24 @@ import os
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--track-uri", help="Play a track URI")
-    parser.add_argument("--search", help="Play a search result")
+    parser.add_argument("query")
     args = parser.parse_args()
 
-    if args.track_uri:
-        track = args.track_uri
-    if args.search:
-        track = search(args.search)
+    if args.query.startswith("spotify:"):
+        track = args.query
+        # Remove URI parameters if possible
+        track = track.split("?")[0]
+    else:
+        track = search(args.query)
     play_wait(track)
 
 
 def get_auth_header():
     token = os.environ.get("ACCESS_TOKEN")
+    # Fall back to retrieve access token from file. This is the recommended
+    # way since it can be replaced without restarting the process.
     if not token:
-        with open("/tmp/accesstoken") as f:
+        with open("/etc/spotify-oauth/accesstoken") as f:
             token = f.read()
     return {"Authorization": "Bearer " + token}
 
