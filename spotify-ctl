@@ -1,0 +1,86 @@
+#!/bin/bash
+set -euo pipefail
+
+auth_header() {
+    token=$ACCESS_TOKEN
+    if [ "$token" == "" ]; then
+        token=$(cat /etc/spotify-oauth/accesstoken)
+    fi
+    echo "Authorization: Bearer $token"
+}
+
+sp_curl() {
+    curl -s -H "$(auth_header)" "$@"
+}
+
+now_playing() {
+    sp_curl "https://api.spotify.com/v1/me/player"
+}
+
+has_active_device() {
+    sp_curl "https://api.spotify.com/v1/me/player/devices" |
+        jq '[.devices[].is_active] | any'
+}
+
+disable_repeat() {
+    sp_curl -XPUT "https://api.spotify.com/v1/me/player/repeat?state=off"
+}
+
+play_track() {
+    track="$1"
+    sp_curl -XPUT \
+        --data @- \
+        "https://api.spotify.com/v1/me/player/play" <<EOF
+{"uris": ["$track"],
+"offset": {"uri": "$track"},
+"position_ms": 0}
+EOF
+}
+
+search() {
+    q="$*"
+    track=$(sp_curl -G --data-urlencode "q=$q" \
+        "https://api.spotify.com/v1/search?type=track&limit=20" |
+        jq -r '.tracks.items[0]')
+    jq 1>&2 -r '.name' <<<"$track"
+
+    jq -r '.uri' <<<"$track"
+}
+
+play_wait() {
+    play_track "$1"
+    while true; do
+        sleep 2
+        np=$(now_playing)
+        is_playing=$(jq -r '.is_playing' <<<"$np")
+        playing_uri=$(jq -r '.item.uri' <<<"$np")
+        remaining_ms=$(jq -r '.item.duration_ms - .progress_ms' <<<"$np")
+
+        # Is the track done?
+        if [ "$is_playing" == "false" ] ||
+            [ "$playing_uri" != "$1" ] ||
+            [ "$remaining_ms" == "0" ]; then
+            exit 0
+        fi
+
+        track_name=$(jq -r '.item.name' <<<"$np")
+        artist_name=$(jq -r '.item.artists[0].name' <<<"$np")
+        echo 1>&2 "$track_name - $artist_name :: $remaining_ms ms remaining"
+    done
+}
+
+if [ "$(has_active_device)" != "true" ]; then
+    echo "No active device!"
+    exit 1
+fi
+
+disable_repeat
+
+if [[ $* == spotify:* ]]; then
+    track="$*"
+else
+    track="$(search "$*")"
+fi
+
+echo "$track"
+play_wait "$track"
