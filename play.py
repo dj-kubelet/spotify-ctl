@@ -64,6 +64,11 @@ def devices():
     j = r.json()
     return j
 
+def disable_repeat():
+    # Make sure that track repetion is completely disabled
+    url = "https://api.spotify.com/v1/me/player/repeat?state=off"
+    r = requests.put(url, headers=get_auth_header())
+    print(r)
 
 def play_track(track):
     url = "https://api.spotify.com/v1/me/player/play"
@@ -72,6 +77,7 @@ def play_track(track):
 
 
 def play_wait(track):
+    disable_repeat()
     play_track(track)
     while True:
         time.sleep(2)
