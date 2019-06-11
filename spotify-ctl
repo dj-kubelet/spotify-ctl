@@ -2,10 +2,12 @@
 set -euo pipefail
 
 auth_header() {
+    set +u
     token=$ACCESS_TOKEN
     if [ "$token" == "" ]; then
         token=$(cat /etc/spotify-oauth/accesstoken)
     fi
+    set -u
     echo "Authorization: Bearer $token"
 }
 
