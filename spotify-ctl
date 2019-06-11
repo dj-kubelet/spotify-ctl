@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+echoerr() { echo "$@" 1>&2; }
+
 auth_header() {
     token=$ACCESS_TOKEN
     if [ "$token" == "" ]; then
@@ -23,14 +25,17 @@ has_active_device() {
 }
 
 disable_repeat() {
-    sp_curl -XPUT "https://api.spotify.com/v1/me/player/repeat?state=off"
+    # $1 = device_id
+    sp_curl -XPUT "https://api.spotify.com/v1/me/player/repeat?state=off&device_id=$1"
 }
 
 play_track() {
+    # $1 = track
+    # $2 = device_id
     track="$1"
     sp_curl -XPUT \
         --data @- \
-        "https://api.spotify.com/v1/me/player/play" <<EOF
+        "https://api.spotify.com/v1/me/player/play?device_id=$2" <<EOF
 {"uris": ["$track"],
 "offset": {"uri": "$track"},
 "position_ms": 0}
@@ -47,8 +52,24 @@ search() {
     jq -r '.uri' <<<"$track"
 }
 
+find_device() {
+    # Play on the currently active device if the user has one
+    if [ "$(has_active_device)" == "true" ]; then
+        echoerr "User has active device"
+        sp_curl "https://api.spotify.com/v1/me/player/devices" | \
+            jq -r '.devices[] | select( .is_active ) | .id'
+        return 0
+    fi
+
+    # Play on the first device found as a fallback
+    echoerr "Trying to play on the first available device"
+    sp_curl "https://api.spotify.com/v1/me/player/devices" | \
+        jq -r '.devices[].id' | \
+        head -n1
+}
+
 play_wait() {
-    play_track "$1"
+    play_track "$1" "$2"
     while true; do
         sleep 2
         np=$(now_playing)
@@ -69,12 +90,14 @@ play_wait() {
     done
 }
 
-if [ "$(has_active_device)" != "true" ]; then
-    echo "No active device!"
+DEVICE=$(find_device)
+
+if [ "$DEVICE" == "" ]; then
+    echo "No player devices connected!"
     exit 1
 fi
 
-disable_repeat
+disable_repeat "$DEVICE"
 
 if [[ $* == spotify:* ]]; then
     track="$*"
@@ -83,4 +106,5 @@ else
 fi
 
 echo "$track"
-play_wait "$track"
+
+play_wait "$track" "$DEVICE"
