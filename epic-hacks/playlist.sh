@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-ACCESS_TOKEN=$(kubectl get secrets spotify-oauth -ojsonpath='{.data.accesstoken}' | base64 -d)
+ACCESS_TOKEN=$(kubectl get secrets spotify-oauth -ojsonpath='{.data.accesstoken}' | base64 --decode)
 
 playlist_id=$1
 
