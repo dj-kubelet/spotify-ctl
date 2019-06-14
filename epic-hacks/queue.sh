@@ -16,7 +16,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 declare -x TRACK
 TRACK="$*"
 
-declare -x JOB_NAME
-JOB_NAME="$(normalize_str "$TRACK")"
+declare -x POD_NAME
+POD_NAME="$(normalize_str "$TRACK")"
 
-envsubst <"$DIR/job.tmpl.yaml" | kubectl create -f -
+envsubst <"$DIR/pod.tmpl.yaml" | kubectl create -f -
