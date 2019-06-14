@@ -1,15 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+# Create a Kubernetes friendly name of the track search input
+normalize_str() {
+    S=${1// /-}                                 # remove spaces from $1
+    S=${S//:/-}                                 # replace : with -
+    S=$(echo "$S" | tr "[:upper:]" "[:lower:]") # lowercase
+    S=$(echo "$S" | LANG=c tr -cd '[:print:]')  # remove non ascii characters
+    S=$(echo "$S" | cut -c-253)                 # trim to max 253 characters
+    echo "$S"
+}
 
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+declare -x TRACK
 TRACK="$*"
 
-# Create a Kubernetes friendly name of the track search input
-JOB_NAME=${TRACK// /-} # remove spaces from $TRACK
-JOB_NAME=${JOB_NAME//:/-} # replace : with -
-JOB_NAME=$(echo "$JOB_NAME" | tr [:upper:] [:lower:]) # lowercase
-JOB_NAME=$(echo "$JOB_NAME" | LANG=c tr -cd '[:print:]') # remove non ascii characters
-JOB_NAME=$(echo "$JOB_NAME" | cut -c-253) # trim to max 253 characters
+declare -x JOB_NAME
+JOB_NAME="$(normalize_str "$TRACK")"
 
-kubectl create -f <(TRACK="$TRACK" JOB_NAME="$JOB_NAME" envsubst < "$DIR/job.tmpl.yaml")
+envsubst <"$DIR/job.tmpl.yaml" | kubectl create -f -
