@@ -3,27 +3,35 @@ set -euo pipefail
 
 echoerr() { echo "$@" 1>&2; }
 
-auth_header() {
+get_token() {
     set +u
     token=$ACCESS_TOKEN
     if [ "$token" == "" ]; then
         token=$(cat /etc/spotify-oauth/accesstoken)
     fi
     set -u
-    echo "Authorization: Bearer $token"
+    echo "$token"
 }
 
 sp_curl() {
-    curl -s -H "$(auth_header)" "$@"
+    echoerr '[DEBUG] curl -s -H "Authorization: Bearer XXX_REDACTED_XXX"' "$@"
+    curl -s -H "Authorization: Bearer $(get_token)" "$@"
 }
 
 now_playing() {
     sp_curl "https://api.spotify.com/v1/me/player"
 }
 
+devices() {
+    local d
+    d=$(sp_curl "https://api.spotify.com/v1/me/player/devices")
+    # After n+1 time units of debugging dj-kubelet decided that it's of great interest to print the devices response.
+    echoerr "$d"
+    echo "$d"
+}
+
 has_active_device() {
-    sp_curl "https://api.spotify.com/v1/me/player/devices" |
-        jq '[.devices[].is_active] | any'
+    devices | jq '[.devices[].is_active] | any'
 }
 
 disable_repeat() {
@@ -32,46 +40,33 @@ disable_repeat() {
 }
 
 play_track() {
-    # $1 = track
-    # $2 = device_id
-    track="$1"
+    local track="$1"
+    local device_id="$2"
     sp_curl -XPUT \
-        --data @- \
-        "https://api.spotify.com/v1/me/player/play?device_id=$2" <<EOF
+        "https://api.spotify.com/v1/me/player/play?device_id=$device_id" \
+        --data @- <<EOF
 {"uris": ["$track"],
 "offset": {"uri": "$track"},
 "position_ms": 0}
 EOF
 }
 
-search() {
-    q="$*"
-    track=$(sp_curl -G --data-urlencode "q=$q" \
-        "https://api.spotify.com/v1/search?type=track&limit=20" |
-        jq -r '.tracks.items[0]')
-    jq 1>&2 -r '.name' <<<"$track"
-
-    jq -r '.uri' <<<"$track"
-}
-
 find_device() {
     # Play on the currently active device if the user has one
     if [ "$(has_active_device)" == "true" ]; then
         echoerr "User has active device"
-        sp_curl "https://api.spotify.com/v1/me/player/devices" | \
-            jq -r '.devices[] | select( .is_active ) | .id'
+        devices | jq -r '[.devices[] | select(.is_active).id] | first'
         return 0
     fi
 
     # Play on the first device found as a fallback
     echoerr "Trying to play on the first available device"
-    sp_curl "https://api.spotify.com/v1/me/player/devices" | \
-        jq -r '.devices[].id' | \
-        head -n1
+    devices | jq -r '[.devices[].id] | first'
 }
 
 play_wait() {
     play_track "$1" "$2"
+    local started="false"
     while true; do
         sleep 2
         np=$(now_playing)
@@ -79,16 +74,22 @@ play_wait() {
         playing_uri=$(jq -r '.item.uri' <<<"$np")
         remaining_ms=$(jq -r '.item.duration_ms - .progress_ms' <<<"$np")
 
+        if [ "$playing_uri" == "$1" ]; then
+            started="true"
+            # Maybe continue since not started yet?
+        fi
+
         # Is the track done?
         if [ "$is_playing" == "false" ] ||
             [ "$playing_uri" != "$1" ] ||
             [ "$remaining_ms" == "0" ]; then
+            echoerr "Track is done: is_playing=$is_playing playing_uri=$playing_uri remaining_ms=$remaining_ms started=$started"
             exit 0
         fi
 
         track_name=$(jq -r '.item.name' <<<"$np")
         artist_name=$(jq -r '.item.artists[0].name' <<<"$np")
-        echo 1>&2 "$track_name - $artist_name :: $remaining_ms ms remaining"
+        echo "$track_name - $artist_name :: $remaining_ms ms remaining"
     done
 }
 
@@ -100,13 +101,6 @@ if [ "$DEVICE" == "" ]; then
 fi
 
 disable_repeat "$DEVICE"
-
-if [[ $* == spotify:* ]]; then
-    track="$*"
-else
-    track="$(search "$*")"
-fi
-
-echo "$track"
-
+track="$*"
+echoerr "$track"
 play_wait "$track" "$DEVICE"
