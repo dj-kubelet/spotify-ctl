@@ -7,7 +7,7 @@ get_token() {
     set +u
     token=$ACCESS_TOKEN
     if [ "$token" == "" ]; then
-        token=$(cat /etc/spotify-oauth/accesstoken)
+        token=$(cat /etc/spotify-oauth/access_token)
     fi
     set -u
     echo "$token"
